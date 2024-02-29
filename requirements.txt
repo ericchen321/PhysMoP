@@ -1,6 +1,11 @@
 numpy
-torch
-torchvision
+# torch
+# torchvision
 pyrender
 trimesh
 opencv-python
+tqdm
+easydict
+einops
+matplotlib==3.7.5
+tensorboard==2.14.0

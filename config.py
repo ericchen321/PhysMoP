@@ -26,8 +26,8 @@ DATASET_VALID_PATH = {
                   }
 
 DATASET_FOLDERS_TEST = {
-                    'H36M': './dataset/data_processed/h36m_test_%d.pkl' % total_length,
-                    'PW3D':  './dataset/data_processed/pw3d_test_%d.pkl' % total_length,
+                    # 'H36M': './dataset/data_processed/h36m_test_%d.pkl' % total_length,
+                    # 'PW3D':  './dataset/data_processed/pw3d_test_%d.pkl' % total_length,
                     'AMASS':  './dataset/data_processed/amass_test_%d.pkl' % total_length,
                 }
 

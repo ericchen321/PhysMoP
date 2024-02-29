@@ -1,0 +1,15 @@
+# IDEs
+.idea/
+
+# compiled files
+build/
+*.egg-info/
+__pycache__/
+
+# datasets
+dataset/data_processed/
+dataset/data_raw/
+dataset/smpl_official/
+
+# logs
+logs/
