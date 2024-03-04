@@ -5,6 +5,7 @@ from easydict import EasyDict as edict
 import torch
 import torch.nn as nn
 import numpy as np
+import spdlayers
 
 from models.siMLPe_mlp import build_mlps
 from einops.layers.torch import Rearrange
@@ -76,7 +77,12 @@ class Regression(nn.Module):
         z = config.dim*4
         Jactuation_layer_size = [z, 512, 256, 63]
         C_layer_size = [z, 512, 256, 63]
-        M_layer_size = [z, 512, 512, 63*32]
+
+        # specify M net layer dims
+        spd_out_dim = config.dim
+        spd_in_dim = spdlayers.in_shape_from(spd_out_dim)
+        M_layer_size = [
+            config.dim, 8192, 8192, 8192, 4096, 4096, 4096, spd_in_dim]
 
         self.jactuation_net_FC1 = nn.Linear(Jactuation_layer_size[0], Jactuation_layer_size[1])
         self.jactuation_net_relu1 = nn.ReLU()
@@ -84,11 +90,24 @@ class Regression(nn.Module):
         self.jactuation_net_relu2 = nn.ReLU()
         self.jactuation_net_FC3 = nn.Linear(Jactuation_layer_size[2], Jactuation_layer_size[3])
 
-        self.M_net_FC1 = nn.Linear(M_layer_size[0], M_layer_size[1])
-        self.M_net_relu1 = nn.ReLU()
-        self.M_net_FC2 = nn.Linear(M_layer_size[1], M_layer_size[2])
-        self.M_net_relu2 = nn.ReLU()
-        self.M_net_FC3 = nn.Linear(M_layer_size[2], M_layer_size[3])
+        self.M_net = nn.Sequential(
+            nn.Linear(M_layer_size[0], M_layer_size[1]),
+            nn.LeakyReLU(),
+            nn.Linear(M_layer_size[1], M_layer_size[2]),
+            nn.LeakyReLU(),
+            nn.Linear(M_layer_size[2], M_layer_size[3]),
+            nn.LeakyReLU(),
+            nn.Linear(M_layer_size[3], M_layer_size[4]),
+            nn.LeakyReLU(),
+            nn.Linear(M_layer_size[4], M_layer_size[5]),
+            nn.LeakyReLU(),
+            nn.Linear(M_layer_size[5], M_layer_size[6]),
+            nn.LeakyReLU(),
+            nn.Linear(M_layer_size[6], M_layer_size[7]),
+            spdlayers.Eigen(
+                output_shape=spd_out_dim,
+                positive="ReLU",
+                device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')))
 
         self.C_net_FC1 = nn.Linear(C_layer_size[0], C_layer_size[1])
         self.C_net_relu1 = nn.ReLU()
@@ -107,6 +126,7 @@ class Regression(nn.Module):
 
     def physics_forward(self, motion_feats_all, motion_current, B, D):
 
+        # Eric: I think feature_state is h_g in the paper
         feature_state = self.motion_fc_in(motion_current)
         feature_state = self.arr0(feature_state)
         feature_state = self.motion_mlp_ode(feature_state)
@@ -120,12 +140,9 @@ class Regression(nn.Module):
         x_jactuation = self.jactuation_net_relu2(x_jactuation)
         pred_jactuation = self.jactuation_net_FC3(x_jactuation.clone())
 
-        # mass estimation
-        x_M = self.M_net_FC1(feature_t.clone())
-        x_M = self.M_net_relu1(x_M)
-        x_M = self.M_net_FC2(x_M)
-        x_M = self.M_net_relu2(x_M)
-        pred_M_vector = self.M_net_FC3(x_M.clone())
+        # directly estimate M inverse
+        q_tp2: torch.Tensor = motion_current[:, -1].view(B, D)
+        pred_M_inv = self.M_net(q_tp2.clone()).reshape(B, D, D).to(feature_state.device)
 
         # C estimation
         x_C = self.C_net_FC1(feature_t.clone())
@@ -134,10 +151,7 @@ class Regression(nn.Module):
         x_C = self.C_net_relu2(x_C)
         pred_C = self.C_net_FC3(x_C.clone())
 
-        pred_M_inv = torch.zeros((B, D, D)).float().to(feature_state.device)
-        tril_indices = torch.tril_indices(row=D, col=D, offset=0)
-        pred_M_inv[:,tril_indices[0], tril_indices[1]] = pred_M_vector
-        pred_M_inv[:,tril_indices[1], tril_indices[0]] = pred_M_vector
+        # predict q_ddot
         pred_q_ddot = (pred_M_inv @ (pred_jactuation - pred_C).unsqueeze(2)).squeeze(2) 
 
         return pred_q_ddot
@@ -164,6 +178,7 @@ class Regression(nn.Module):
 
         motion_pred_fusion = torch.zeros([B, config.total_length, D]).float().to(motion_input.device)
 
+        # Eric: I think this's where they predict h_p
         motion_feats_all = self.motion_feats_fc(motion_feats.reshape([B, N*D]))
 
         # fusion_weights = torch.tanh(self.fusion_net(motion_feats.reshape([B, N*D]))) ** 2

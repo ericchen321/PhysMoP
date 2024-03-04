@@ -3,6 +3,7 @@ import json
 import argparse
 import numpy as np
 from collections import namedtuple
+from datetime import datetime
 
 import config
 
@@ -72,7 +73,8 @@ class TrainOptions():
                 return json_args
         else:
             self.args.log_dir = os.path.join(os.path.abspath(self.args.log_dir), self.args.name)
-            self.args.summary_dir = os.path.join(self.args.log_dir, 'tensorboard')
+            time_curr = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
+            self.args.summary_dir = os.path.join(self.args.log_dir, 'tensorboard',  time_curr)
             if not os.path.exists(self.args.log_dir):
                 os.makedirs(self.args.log_dir)
             self.args.checkpoint_dir = os.path.join(self.args.log_dir, 'checkpoints')
