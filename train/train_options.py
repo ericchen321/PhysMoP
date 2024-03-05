@@ -77,7 +77,7 @@ class TrainOptions():
             self.args.summary_dir = os.path.join(self.args.log_dir, 'tensorboard',  time_curr)
             if not os.path.exists(self.args.log_dir):
                 os.makedirs(self.args.log_dir)
-            self.args.checkpoint_dir = os.path.join(self.args.log_dir, 'checkpoints')
+            self.args.checkpoint_dir = os.path.join(self.args.log_dir, 'checkpoints', time_curr)
             if not os.path.exists(self.args.checkpoint_dir):
                 os.makedirs(self.args.checkpoint_dir)
             self.save_dump()
